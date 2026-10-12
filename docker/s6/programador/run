@@ -6,7 +6,29 @@
 # concreta: Railway no deja compartir un volumen entre servicios, y
 # `teav:respaldar` escribe en el mismo volumen que los expedientes. Un cron
 # separado no tendría dónde dejar los respaldos.
+
+cd /var/www/html || exit 1
+
+# Espera a que las migraciones hayan corrido.
 #
-# `schedule:work` se queda en primer plano y dispara cada minuto por su
+# El script de arranque las ejecuta, pero s6 no garantiza que termine antes
+# de levantar este servicio. Sin esperar, `schedule:work` arrancaría contra
+# una base sin la tabla de caché y moriría en bucle en el primer despliegue.
+intentos=0
+until su www-data -s /bin/sh -c "php artisan migrate:status" >/dev/null 2>&1; do
+    intentos=$((intentos + 1))
+
+    if [ "$intentos" -gt 60 ]; then
+        echo "[programador] La base no respondió en 5 minutos; me rindo."
+        exit 1
+    fi
+
+    echo "[programador] Esperando a la base de datos... ($intentos)"
+    sleep 5
+done
+
+echo "[programador] Base lista, arrancando el programador."
+
+# schedule:work se queda en primer plano y dispara cada minuto por su
 # cuenta; s6 lo reinicia si se cae.
-exec su www-data -s /bin/sh -c "php /var/www/html/artisan schedule:work --no-interaction"
+exec su www-data -s /bin/sh -c "php artisan schedule:work --no-interaction"

@@ -85,9 +85,26 @@ RUN chmod +x /etc/entrypoint.d/90-teav.sh
 # Railway no permite compartir un volumen entre servicios y `teav:respaldar`
 # escribe en el mismo volumen que los expedientes: un servicio de cron
 # separado se quedaría sin dónde dejar los respaldos. Por eso va aquí dentro.
-COPY docker/s6/programador /etc/s6-overlay/s6-rc.d/programador
-RUN chmod +x /etc/s6-overlay/s6-rc.d/programador/run \
-    && touch /etc/s6-overlay/s6-rc.d/user/contents.d/programador
+COPY --chmod=755 docker/s6/programador /etc/s6-overlay/s6-rc.d/programador
+
+# Registrar el servicio en el bundle "user": s6 sólo arranca lo que esté
+# listado ahí. s6-overlay movió ese bundle de sitio en la versión 3.2.3.2
+# (de s6-rc.d/user a user-bundles.d/user), y cuál de las dos trae la imagen
+# depende de su versión. Se detecta en vez de suponerla, y si no aparece
+# ninguna el build falla aquí en vez de desplegar un contenedor sano en el
+# que, calladamente, nunca corre la cobranza.
+RUN set -eu; \
+    if [ -d /etc/s6-overlay/user-bundles.d/user ]; then \
+        bundle=/etc/s6-overlay/user-bundles.d/user/contents.d; \
+    elif [ -d /etc/s6-overlay/s6-rc.d/user ]; then \
+        bundle=/etc/s6-overlay/s6-rc.d/user/contents.d; \
+    else \
+        echo "No encuentro el bundle 'user' de s6-overlay en esta imagen." >&2; \
+        exit 1; \
+    fi; \
+    mkdir -p "$bundle"; \
+    touch "$bundle/programador"; \
+    echo "Programador registrado en $bundle" 
 
 USER www-data
 
