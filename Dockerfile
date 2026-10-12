@@ -1,27 +1,10 @@
 # Imagen de producción para Railway.
 #
-# Tres etapas: se compilan los assets con Node, se resuelven las dependencias
-# de PHP con Composer, y sólo el resultado de ambas entra a la imagen final.
-# Ni node_modules ni Composer viajan a producción.
+# Tres etapas: primero las dependencias de PHP, luego los assets (que las
+# necesitan), y al final la imagen que se despliega. Ni node_modules ni
+# Composer viajan a producción.
 
-# ─────────────────── 1. Assets (Vite + tema de Filament) ───────────────────
-FROM node:22-alpine AS assets
-
-WORKDIR /app
-
-COPY package.json package-lock.json* ./
-RUN npm ci
-
-# vite.config.js compila tres entradas, y una es el tema propio del panel
-# (resources/css/filament/admin/theme.css). Sin él, Filament carga pero sin
-# los estilos de la marca.
-COPY vite.config.js ./
-COPY resources ./resources
-
-RUN npm run build
-
-
-# ─────────────────── 2. Dependencias de PHP ───────────────────
+# ─────────────────── 1. Dependencias de PHP ───────────────────
 FROM composer:2 AS vendor
 
 WORKDIR /app
@@ -41,6 +24,32 @@ RUN composer install \
 COPY . .
 
 RUN composer dump-autoload --optimize --no-dev --classmap-authoritative
+
+
+# ─────────────────── 2. Assets (Vite + tema de Filament) ───────────────────
+# Esta etapa va DESPUÉS de vendor y no al revés, porque el tema del panel
+# arranca con:
+#
+#   @import '../../../../vendor/filament/filament/resources/css/theme.css';
+#   @source  '../../../../app/Filament/**/*';
+#
+# O sea: necesita el paquete de Filament instalado y el código del panel a la
+# vista. Sin vendor/ el build truena en el import; sin app/Filament/ compila
+# pero Tailwind descarta las clases que sólo aparecen ahí y el panel sale
+# desmaquillado, que es el fallo más difícil de diagnosticar de los dos.
+FROM node:22-alpine AS assets
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY vite.config.js ./
+COPY resources ./resources
+COPY app ./app
+COPY --from=vendor /app/vendor ./vendor
+
+RUN npm run build
 
 
 # ─────────────────── 3. Imagen final ───────────────────
