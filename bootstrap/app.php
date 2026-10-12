@@ -13,7 +13,20 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        /**
+         * Confiar en el proxy de la plataforma.
+         *
+         * Railway termina el TLS en su borde y le entrega al contenedor una
+         * petición HTTP plana, con el esquema original en X-Forwarded-Proto.
+         * Sin esto Laravel cree que la petición fue http:// y genera las URLs
+         * de los assets con ese esquema; el navegador las bloquea por
+         * contenido mixto y el panel aparece sin estilos, como HTML pelón.
+         *
+         * `at: '*'` confía en cualquier proxy, que es lo correcto en Railway:
+         * el contenedor no es alcanzable desde fuera más que a través de su
+         * borde, así que nadie puede falsificar esas cabeceras.
+         */
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
