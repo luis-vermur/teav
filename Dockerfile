@@ -106,7 +106,18 @@ RUN set -eu; \
     touch "$bundle/programador"; \
     echo "Programador registrado en $bundle" 
 
-USER www-data
+# El contenedor queda como root, y es deliberado.
+#
+# Railway monta el volumen con dueño root; el panel corre como www-data. Sin
+# privilegios, el script de arranque no puede ajustar el dueño de /datos y la
+# primera subida de un documento falla. Además el servicio del programador
+# hace `su www-data`, que tampoco funciona sin root.
+#
+# Esto NO significa que la aplicación atienda tráfico como root: nginx y
+# php-fpm bajan a www-data por su cuenta, igual que siempre, y el script de
+# arranque corre artisan como www-data para no dejar cachés con dueño root.
+# Es la vía que documenta el propio mantenedor de la imagen.
+USER root
 
 # Railway inyecta PORT; la imagen la lee de esta variable.
 ENV PHP_OPCACHE_ENABLE=1 \
