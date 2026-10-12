@@ -119,7 +119,11 @@ RUN set -eu; \
 # Es la vía que documenta el propio mantenedor de la imagen.
 USER root
 
-# Railway inyecta PORT; la imagen la lee de esta variable.
+# nginx escucha aquí. Se declara para que Railway no autodetecte el 9000 de
+# PHP-FPM, que habla FastCGI y no HTTP: el contenedor funciona pero el proxy
+# no obtiene nada y la URL responde "Application failed to respond".
+EXPOSE 8080
+
 ENV PHP_OPCACHE_ENABLE=1 \
     SSL_MODE=off \
     AUTORUN_ENABLED=false

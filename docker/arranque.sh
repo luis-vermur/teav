@@ -34,6 +34,13 @@ echo "→ Migraciones"
 # --force porque en producción Laravel pregunta, y aquí no hay quién conteste.
 como_www "php /var/www/html/artisan migrate --force"
 
+echo "→ Roles y permisos"
+# Son configuración, no datos: al resembrarlos en cada despliegue, un permiso
+# nuevo aparece solo, sin que nadie tenga que acordarse de correr nada. El
+# seeder usa firstOrCreate en todo, así que repetirlo no pisa nada, y el
+# usuario de prueba no se crea en producción.
+como_www "php /var/www/html/artisan db:seed --class=RolesPermisosSeeder --force"
+
 echo "→ Cachés de producción"
 # Se reconstruyen en cada despliegue: si quedaran las del build anterior,
 # una ruta o una variable nueva no aparecería y el fallo sería invisible.

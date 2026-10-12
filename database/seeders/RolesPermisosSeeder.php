@@ -131,13 +131,23 @@ class RolesPermisosSeeder extends Seeder
             Permission::where('name', 'like', 'ver_%')->get()
         );
 
+        $this->command->info('Roles creados: administrador, gerente, operador, cobranza, flotilla, consulta');
+
         /**
          * Usuario de prueba del rol operador.
          *
-         * Contraseña por defecto: operador123 — CAMBIARLA antes de que esto
-         * toque un ambiente real. firstOrCreate no pisa la contraseña si el
-         * usuario ya existe, así que volver a correr el seeder es inocuo.
+         * SÓLO fuera de producción. Es una cuenta con correo y contraseña
+         * conocidos: en un panel publicado en internet equivale a dejar la
+         * puerta abierta. Y como los roles y permisos sí conviene resembrarlos
+         * en cada despliegue —son configuración, no datos—, este seeder acaba
+         * corriendo en producción tarde o temprano.
          */
+        if (app()->environment('production')) {
+            $this->command->warn('Entorno de producción: no se creó el usuario de prueba.');
+
+            return;
+        }
+
         $operadorUser = User::firstOrCreate(
             ['email' => 'operador@teav.mx'],
             [
@@ -150,7 +160,6 @@ class RolesPermisosSeeder extends Seeder
             $operadorUser->assignRole('operador');
         }
 
-        $this->command->info('Roles creados: administrador, gerente, operador, cobranza, flotilla, consulta');
         $this->command->info('Usuario de prueba: operador@teav.mx / operador123 (cambiar la contraseña)');
     }
 }
