@@ -1,0 +1,155 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --oro:       #b8912f;
+  --oro-claro: #d9b75a;
+  --oro-osc:   #8a6a1e;
+  --oro-grad:  linear-gradient(135deg, var(--oro-osc) 0%, var(--oro-claro) 55%, #a8842a 100%);
+  --tinta:     #08080a;
+}
+
+/* Esquinas rectas en todo, como el sitio */
+.fi-btn,
+.fi-input,
+.fi-select,
+.fi-ta-ctn,
+.fi-section,
+.fi-wi-stats-overview-stat,
+.fi-modal-window,
+.fi-badge,
+.fi-dropdown-panel {
+  border-radius: 0 !important;
+}
+
+/* Títulos en Archivo, con el tracking cerrado del sitio */
+.fi-header-heading,
+.fi-section-header-heading,
+.fi-modal-heading,
+.fi-wi-stats-overview-stat-value {
+  font-family: 'Archivo', system-ui, sans-serif !important;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.fi-header-heading {
+  font-weight: 800;
+  letter-spacing: -0.045em;
+}
+
+/* Las etiquetas de las tarjetas, como los kickers del sitio */
+.fi-wi-stats-overview-stat-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oro);
+}
+
+/* Marca de agua dorada en la barra lateral */
+.fi-sidebar-nav {
+  border-right: 1px solid rgba(184, 145, 47, 0.12);
+}
+
+.fi-sidebar-item-active .fi-sidebar-item-button {
+  border-left: 2px solid var(--oro);
+}
+
+/* Grano sutil, igual que el sitio */
+.fi-body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Los botones primarios con el hover dorado del sitio */
+.fi-btn-color-primary:hover {
+  background-image: var(--oro-grad);
+}
+/* ═══════════════════════════════════════════════════════════════
+   PANTALLA DE ACCESO
+   Es lo primero que ve cualquiera al entrar a la raíz del sitio,
+   así que carga la identidad de la marca: fondo tinta, chevrón
+   dorado de marca de agua y tipografía Archivo del sitio.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Fondo de la pantalla simple (login) */
+.fi-simple-layout {
+  background-color: var(--tinta);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(184, 145, 47, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 50% 110%, rgba(184, 145, 47, 0.08), transparent 70%);
+}
+
+/* El chevrón de la marca, muy tenue, detrás de la tarjeta */
+.fi-simple-layout::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url('/images/marca-teav.svg');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: min(70vw, 620px);
+}
+
+/* La tarjeta: esquinas rectas y filo dorado arriba, como el sitio */
+.fi-simple-main {
+  position: relative;
+  z-index: 1;
+  border-radius: 0 !important;
+  border-top: 3px solid transparent;
+  border-image: var(--oro-grad) 1;
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+}
+
+/* Kicker dorado sobre el título, igual que en las tarjetas del tablero */
+.teav-login-kicker {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--oro);
+  margin-bottom: 0.35rem;
+}
+
+.teav-login-title {
+  display: block;
+  font-family: 'Archivo', system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  font-size: 2rem;
+  line-height: 1.1;
+}
+
+.teav-login-sub {
+  color: var(--fi-color-gray-400, #98989f);
+  font-size: 0.9375rem;
+}
+
+/* Pie bajo el formulario */
+.teav-login-pie {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(184, 145, 47, 0.15);
+  font-size: 0.75rem;
+  line-height: 1.7;
+  text-align: center;
+  color: var(--fi-color-gray-400, #98989f);
+}
+
+/* El logo del encabezado, con aire */
+.fi-simple-layout .fi-logo {
+  margin-bottom: 0.5rem;
+}

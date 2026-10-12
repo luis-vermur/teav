@@ -1,0 +1,12 @@
+#!/command/with-contenv sh
+#
+# Programador de Laravel.
+#
+# Va DENTRO del contenedor web, no en un servicio aparte, por una razón
+# concreta: Railway no deja compartir un volumen entre servicios, y
+# `teav:respaldar` escribe en el mismo volumen que los expedientes. Un cron
+# separado no tendría dónde dejar los respaldos.
+#
+# `schedule:work` se queda en primer plano y dispara cada minuto por su
+# cuenta; s6 lo reinicia si se cae.
+exec su www-data -s /bin/sh -c "php /var/www/html/artisan schedule:work --no-interaction"
