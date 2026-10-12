@@ -75,6 +75,22 @@ class TiposDocumentoSeeder extends Seeder
             ];
         }
 
-        DB::table('tipos_documento')->insert($filas);
+        /**
+         * upsert y no insert: este catálogo se resiembra en cada despliegue
+         * —es configuración, no datos— y un insert crudo duplicaría los 24
+         * tipos o reventaría contra el índice único de `clave`.
+         *
+         * `created_at` queda fuera de las columnas a actualizar para no
+         * reescribir la fecha de alta original en cada arranque.
+         */
+        DB::table('tipos_documento')->upsert(
+            $filas,
+            ['clave'],
+            [
+                'nombre', 'aplica_a', 'es_obligatorio', 'requiere_vigencia',
+                'dias_alerta_previa', 'permite_multiples', 'mimes_permitidos',
+                'tamano_max_mb', 'orden', 'activo', 'updated_at',
+            ],
+        );
     }
 }

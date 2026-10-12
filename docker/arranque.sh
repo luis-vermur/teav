@@ -41,6 +41,16 @@ echo "→ Roles y permisos"
 # usuario de prueba no se crea en producción.
 como_www "php /var/www/html/artisan db:seed --class=RolesPermisosSeeder --force"
 
+echo "→ Catálogos"
+# Marcas, modelos, colores, aseguradoras y tipos de documento son
+# configuración, no datos del negocio: sin ellos no se puede dar de alta un
+# vehículo ni subir un documento. Todos son idempotentes.
+como_www "php /var/www/html/artisan db:seed --class=ColoresSeeder --force"
+como_www "php /var/www/html/artisan db:seed --class=MarcasSeeder --force"
+como_www "php /var/www/html/artisan db:seed --class=AseguradorasSeeder --force"
+como_www "php /var/www/html/artisan db:seed --class=TiposDocumentoSeeder --force"
+como_www "php /var/www/html/artisan db:seed --class=TiposMantenimientoSeeder --force"
+
 echo "→ Cachés de producción"
 # Se reconstruyen en cada despliegue: si quedaran las del build anterior,
 # una ruta o una variable nueva no aparecería y el fallo sería invisible.

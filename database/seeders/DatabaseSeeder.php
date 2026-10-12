@@ -23,6 +23,7 @@ class DatabaseSeeder extends Seeder
             ColoresSeeder::class,
             MarcasSeeder::class,
             AseguradorasSeeder::class,
+            TiposDocumentoSeeder::class,
             TiposMantenimientoSeeder::class,
         ]);
 
