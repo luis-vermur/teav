@@ -5,6 +5,21 @@ declare(strict_types=1);
 use LaravelLang\Config\Constants\RouteName;
 use LaravelLang\LocaleList\Locale;
 
+/*
+ * laravel-lang/common vive en require-dev: es la herramienta que PUBLICA las
+ * traducciones, no la que las sirve. Lo que el sistema usa en producción son
+ * los archivos ya publicados en lang/es/, que sí están versionados.
+ *
+ * El problema es que Laravel carga todos los archivos de config/ siempre, y
+ * éste referencia enums del paquete. En producción se instala con --no-dev,
+ * la clase no existe y el despliegue muere en `package:discover` con un
+ * "Class LaravelLang\LocaleList\Locale not found" que no dice nada de todo
+ * esto. Con la guarda, el archivo se vuelve inerte cuando el paquete no está.
+ */
+if (! class_exists(Locale::class)) {
+    return [];
+}
+
 return [
     /*
      * Determines what type of files to use when updating language files.
