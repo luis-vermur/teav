@@ -13,9 +13,9 @@ class ContratoService
      * registra el depósito y marca la unidad como arrendada.
      * Todo o nada — si algo falla, no queda nada a medias.
      */
-    public function activar(Contrato $contrato): Contrato
+    public function activar(Contrato $contrato, bool $migrando = false): Contrato
     {
-        $this->validarActivacion($contrato);
+        $this->validarActivacion($contrato, $migrando);
 
         return DB::transaction(function () use ($contrato) {
             $this->generarCalendario($contrato);
@@ -50,7 +50,7 @@ class ContratoService
      * Reglas que deben cumplirse antes de entregar una unidad.
      * Fallar aquí es barato; fallar después de entregar el auto, no.
      */
-    protected function validarActivacion(Contrato $contrato): void
+    protected function validarActivacion(Contrato $contrato, bool $migrando = false): void
     {
         if ($contrato->estatus === 'vigente') {
             throw new RuntimeException('El contrato ya está vigente.');
@@ -80,11 +80,25 @@ class ContratoService
             throw new RuntimeException("El arrendatario no está activo (estatus: {$arrendatario->estatus}).");
         }
 
-        if ($arrendatario->tieneAdeudoVencido()) {
+        /**
+         * No se le renta otro auto a quien ya debe. La regla es correcta
+         * para un contrato nuevo y se salta sólo al migrar: ahí no se está
+         * decidiendo nada, se está registrando algo que ya pasó. El cliente
+         * ya tiene el auto; negarse a capturarlo no se lo quita, sólo deja
+         * al sistema sin saber que existe.
+         */
+        if (! $migrando && $arrendatario->tieneAdeudoVencido()) {
             throw new RuntimeException('El arrendatario tiene adeudos vencidos en otro contrato.');
         }
 
-        if ($faltantes = $arrendatario->documentosFaltantes()) {
+        /**
+         * Expediente completo antes de firmar. Igual que con los adeudos,
+         * al migrar no se aplica: el contrato ya existe en la realidad y
+         * negarse a capturarlo no completa ningún expediente, sólo deja al
+         * sistema ciego. El importador reporta a quién le falta qué, para
+         * que quede como pendiente visible y no como algo que se coló.
+         */
+        if (! $migrando && $faltantes = $arrendatario->documentosFaltantes()) {
             throw new RuntimeException(
                 'Al arrendatario le faltan documentos: ' . implode(', ', $faltantes)
             );

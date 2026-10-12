@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Arrendatario;
+use App\Models\Contrato;
 use App\Models\Aseguradora;
 use App\Models\Color;
 use App\Models\Documento;
@@ -12,6 +13,9 @@ use App\Models\Submarca;
 use App\Models\TipoDocumento;
 use App\Models\Unidad;
 use App\Models\User;
+use App\Services\ContratoService;
+use App\Services\PagoService;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -35,7 +39,7 @@ use Illuminate\Support\Facades\Storage;
 class ImportarFlota extends Command
 {
     protected $signature = 'teav:importar
-        {--ruta= : Carpeta con clientes.csv y flota.csv}
+        {--ruta= : Carpeta con clientes.csv, flota.csv y (opcional) contratos.csv}
         {--archivos= : Carpeta con las subcarpetas de cada auto (TC y pólizas)}
         {--documentos : Además de los datos, sube las TC y carátulas al expediente}
         {--revisar : No escribe nada; sólo valida y reporta qué haría}';
@@ -49,6 +53,15 @@ class ImportarFlota extends Command
 
     /** Lo que se va a reportar al final. */
     protected array $resumen = [];
+
+    /**
+     * A quién se le atribuye lo que escribe el comando.
+     *
+     * En consola no hay sesión, así que `auth()->id()` es null y las columnas
+     * `registrado_por` y `subido_por` —que son NOT NULL— revientan la carga.
+     * Se resuelve una sola vez al arrancar.
+     */
+    protected ?User $responsable = null;
 
     public function handle(): int
     {
@@ -70,6 +83,10 @@ class ImportarFlota extends Command
         $clientes = $this->leerCsv($clientesCsv);
         $flota    = $this->leerCsv($flotaCsv);
 
+        // contratos.csv es opcional: la flota puede cargarse sin rentar.
+        $contratosCsv = "{$ruta}/contratos.csv";
+        $contratos    = is_readable($contratosCsv) ? $this->leerCsv($contratosCsv) : [];
+
         // Antes de tocar la base: ¿los datos alcanzan?
         if (! $this->validar($clientes, $flota)) {
             return self::FAILURE;
@@ -79,7 +96,7 @@ class ImportarFlota extends Command
             $this->warn('Modo revisión: no se escribió nada.');
         }
 
-        $usuario = User::orderBy('id')->first();
+        $usuario = $this->responsable = User::orderBy('id')->first();
 
         if (! $usuario) {
             $this->error('No hay ningún usuario en la base; los documentos necesitan un responsable.');
@@ -88,7 +105,7 @@ class ImportarFlota extends Command
         }
 
         try {
-            DB::transaction(function () use ($clientes, $flota, $usuario) {
+            DB::transaction(function () use ($clientes, $flota, $contratos, $usuario) {
                 $this->components->info('Catálogos');
                 $this->catalogos($flota);
 
@@ -97,6 +114,11 @@ class ImportarFlota extends Command
 
                 $this->components->info('Vehículos y pólizas');
                 $this->vehiculos($flota, $mapaClientes);
+
+                if ($contratos) {
+                    $this->components->info('Contratos');
+                    $this->contratos($contratos, $mapaClientes);
+                }
 
                 if ($this->option('documentos')) {
                     $this->components->info('Expediente');
@@ -408,6 +430,144 @@ class ImportarFlota extends Command
         }
 
         $this->resumen[] = 'Vehículos: ' . count($flota) . " · Pólizas: {$polizas}";
+    }
+
+    // ───────────────────────────── contratos ─────────────────────────────
+
+    /**
+     * Da de alta los contratos y los activa.
+     *
+     * Activar es lo que genera el calendario de pagos, y ahí está la parte
+     * delicada: estos contratos llevan meses corriendo. Un contrato que
+     * arrancó en agosto de 2025 genera sus 14 exhibiciones vencidas, y sin
+     * más el sistema mostraría al cliente con 14 meses de mora y el proceso
+     * nocturno le generaría recargos por un adeudo que no existe.
+     *
+     * Por eso la columna `pagado_hasta`: lo ya cobrado se salda de una vez,
+     * con un pago de migración que deja la contabilidad cuadrada y el rastro
+     * visible de que vino de aquí y no de la caja.
+     */
+    protected function contratos(array $contratos, array $mapaClientes): void
+    {
+        $servicio = app(ContratoService::class);
+        $altas = 0;
+        $saldados = 0;
+
+        foreach ($contratos as $c) {
+            $unidad = Unidad::where('codigo_interno', $c['codigo_interno'])->first();
+
+            if (! $unidad) {
+                $this->warn("    No encuentro el vehículo {$c['codigo_interno']}");
+
+                continue;
+            }
+
+            // Ya existe: no se vuelve a crear ni se le regenera el calendario.
+            if ($unidad->contratos()->whereNotIn('estatus', ['rescindido', 'finalizado'])->exists()) {
+                $this->line("    {$unidad->codigo_interno}  ya tiene contrato, se omite");
+
+                continue;
+            }
+
+            $inicio = Carbon::parse($c['fecha_inicio'])->startOfDay();
+            $plazo  = (int) $c['plazo_meses'];
+            $conIva = (float) $c['renta_con_iva'];
+            $tasa   = (float) ($c['tasa_iva'] ?? 0.16);
+
+            $contrato = Contrato::create([
+                'unidad_id'                 => $unidad->id,
+                'arrendatario_id'           => $mapaClientes[$c['cliente']],
+                'fecha_firma'               => $inicio,
+                'fecha_inicio'              => $inicio,
+                'fecha_fin'                 => $inicio->copy()->addMonths($plazo),
+                'plazo_meses'               => $plazo,
+                'renta_con_iva'             => $conIva,
+                // Se despeja de la renta con IVA, que es la que se pactó.
+                'renta_sin_iva'             => round($conIva / (1 + $tasa), 2),
+                'tasa_iva'                  => $tasa,
+                'dia_corte'                 => (int) ($c['dia_corte'] ?? 1),
+                'periodicidad'              => 'mensual',
+                'deposito_garantia'         => $this->oNuloDecimal($c['deposito_garantia'] ?? null) ?? 0,
+                'enganche'                  => 0,
+                'dias_gracia'               => (int) ($c['dias_gracia'] ?? 5),
+                'prorratear_primer_mes'     => $this->esSi($c['prorratear_primer_mes'] ?? 'si'),
+                'cobra_seguro'              => $this->esSi($c['cobra_seguro'] ?? 'si'),
+                'monto_seguro_anual'        => $this->oNuloDecimal($c['monto_seguro_anual'] ?? null) ?? 0,
+                'gastos_iniciales'          => $this->oNuloDecimal($c['gastos_iniciales'] ?? null) ?? 0,
+                'concepto_gastos_iniciales' => $this->oNulo($c['concepto_gastos_iniciales'] ?? null),
+                'estatus'                   => 'borrador',
+                'registrado_por'            => $this->responsable?->id,
+            ]);
+
+            $servicio->activar($contrato, migrando: true);
+            $contrato->refresh();
+
+            // Lo que se saltó la validación, dicho en voz alta.
+            if ($faltan = $contrato->arrendatario->documentosFaltantes()) {
+                $this->warn("      ⚠ {$contrato->arrendatario->nombre_completo} "
+                    . 'sin expediente completo: ' . implode(', ', $faltan));
+            }
+
+            $exhibiciones = $contrato->pagosProgramados()->count();
+            $this->line("    {$contrato->folio}  {$unidad->codigo_interno}  "
+                . "{$plazo} meses desde {$inicio->format('d/M/Y')}  ·  {$exhibiciones} exhibiciones");
+
+            $altas++;
+
+            if (filled($c['pagado_hasta'] ?? null)) {
+                $saldados += $this->saldarHistorico($contrato, Carbon::parse($c['pagado_hasta']));
+            }
+        }
+
+        $this->resumen[] = "Contratos: {$altas}"
+            . ($saldados > 0 ? " · {$saldados} exhibiciones saldadas por migración" : '');
+    }
+
+    /**
+     * Marca como cobrado lo que ya se cobró antes de que existiera el sistema.
+     *
+     * No inventa pagos sueltos: registra UNO solo, con folio propio y una nota
+     * que dice de dónde salió. Así el contrato queda al corriente y cualquiera
+     * que audite ve que ese dinero no entró por la caja del sistema.
+     */
+    protected function saldarHistorico(Contrato $contrato, Carbon $hasta): int
+    {
+        $pendientes = $contrato->pagosProgramados()
+            ->whereDate('fecha_vencimiento', '<=', $hasta)
+            ->whereIn('estatus', ['pendiente', 'parcial', 'vencido'])
+            ->orderBy('fecha_vencimiento')
+            ->get();
+
+        if ($pendientes->isEmpty()) {
+            return 0;
+        }
+
+        $total = (float) $pendientes->sum('saldo');
+
+        $pago = $contrato->pagos()->create([
+            'arrendatario_id' => $contrato->arrendatario_id,
+            'fecha_pago'      => $hasta,
+            'monto'           => $total,
+            'metodo_pago'     => 'otro',
+            'referencia'      => 'MIGRACION',
+            'notas'           => 'Cobranza anterior a la puesta en marcha del sistema, '
+                . 'saldada al migrar. Cubre hasta el ' . $hasta->format('d/M/Y') . '.',
+            'estatus'         => 'registrado',
+            'registrado_por'  => $this->responsable?->id,
+        ]);
+
+        app(PagoService::class)->aplicar($pago);
+
+        $this->line('      ↳ saldadas ' . $pendientes->count() . ' exhibiciones anteriores al '
+            . $hasta->format('d/M/Y') . '  ($' . number_format($total, 2) . ')');
+
+        return $pendientes->count();
+    }
+
+    /** "si", "sí", "1", "true" → true. Lo demás, false. */
+    protected function esSi(?string $v): bool
+    {
+        return in_array(mb_strtolower(trim((string) $v)), ['si', 'sí', '1', 'true', 'x'], true);
     }
 
     // ───────────────────────────── documentos ─────────────────────────────
