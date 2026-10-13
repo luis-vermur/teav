@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Mantenimientos;
 
+use App\Filament\Resources\Mantenimientos\RelationManagers\DocumentosRelationManager;
 use App\Filament\Resources\Mantenimientos\Pages\CreateMantenimiento;
 use App\Filament\Resources\Mantenimientos\Pages\EditMantenimiento;
 use App\Filament\Resources\Mantenimientos\Pages\ViewMantenimiento;
@@ -47,7 +48,7 @@ class MantenimientoResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            DocumentosRelationManager::class,
         ];
     }
 
